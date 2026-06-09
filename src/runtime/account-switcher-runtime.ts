@@ -26,9 +26,12 @@ export default class AccountSwitcherRuntime implements AccountSwitcher {
   private lastStatusLabel: string | undefined;
   private sessionKey: string | undefined;
 
-  constructor(private readonly pi: Pick<ExtensionAPI, "registerProvider" | "setModel">) {
-    this.providerService = useProviderService(this.pi as ExtensionAPI, PROVIDERS_PATH);
-    this.accountService = useAccountService(ACCOUNTS_PATH, STATE_PATH);
+  constructor(
+    private readonly pi: Pick<ExtensionAPI, "registerProvider" | "setModel">,
+    private readonly paths?: { accounts: string; providers: string; state: string },
+  ) {
+    this.providerService = useProviderService(this.pi as ExtensionAPI, paths?.providers ?? PROVIDERS_PATH);
+    this.accountService = useAccountService(paths?.accounts ?? ACCOUNTS_PATH, paths?.state ?? STATE_PATH);
     this.modelService = useModelService(this.pi);
     this.piAuthService = usePiAuthService();
   }
