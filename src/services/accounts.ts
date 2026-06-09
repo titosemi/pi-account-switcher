@@ -43,6 +43,10 @@ class AccountServiceImpl implements AccountService {
   }
 
   async load(): Promise<void> {
+    // Apply config TTL to state store before loading
+    const config = await this.store.loadConfig();
+    this.stateStore.setCleanupDays(config.stateCleanupDays ?? 30);
+
     this.accounts = await this.store.load();
     const key = this.sessionKey ?? "default";
     const state = await this.stateStore.loadSession(key);

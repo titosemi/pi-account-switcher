@@ -170,6 +170,11 @@ export default class AccountSwitcherRuntime implements AccountSwitcher {
     if (accountProvider !== currentProvider) {
       const model = await modelUtil.pickModel(ctx, account, providers, accountProvider);
       if (model) await this.applyModel(model, ctx);
+    } else {
+      // Same provider — persist current model for full session tracking
+      if (ctx.model) {
+        await this.accountService.saveActiveModel(ctx.model.id, ctx.model.provider);
+      }
     }
 
     return providerApiKey ? `provider apiKey (${providerApiKey})` : result;
