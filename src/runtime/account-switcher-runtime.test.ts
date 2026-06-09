@@ -67,7 +67,7 @@ describe("AccountSwitcherRuntime", () => {
       await useStateStore(statePath).saveSession(sessionKey, { activeAccountId: "pxs" });
 
       // Create runtime with custom paths and run init in a dir that would match "personal"
-      const pi = { registerProvider: () => {}, setModel: () => {} };
+      const pi = { registerProvider: () => {}, setModel: async () => true };
       const runtime = new AccountSwitcherRuntime(pi, { accounts: accPath, providers: provPath, state: statePath });
       const ctx = mockCtx({ cwd: "/home/user/my-project", sessionFile: "session-mysession" });
       await runtime.init(ctx);
@@ -98,7 +98,7 @@ describe("AccountSwitcherRuntime", () => {
       });
       await setup.setDefaultAccountId("pxs");
 
-      const pi = { registerProvider: () => {}, setModel: () => {} };
+      const pi = { registerProvider: () => {}, setModel: async () => true };
       const runtime = new AccountSwitcherRuntime(pi, { accounts: accPath, providers: provPath, state: statePath });
       const ctx = mockCtx({ cwd: "/home/user/my-project" });
       await runtime.init(ctx);
@@ -129,7 +129,7 @@ describe("AccountSwitcherRuntime", () => {
       });
       await setup.setDefaultAccountId("pxs");
 
-      const pi = { registerProvider: () => {}, setModel: () => {} };
+      const pi = { registerProvider: () => {}, setModel: async () => true };
       const runtime = new AccountSwitcherRuntime(pi, { accounts: accPath, providers: provPath, state: statePath });
       const ctx = mockCtx({ cwd: "/some/unrelated/path" });
       await runtime.init(ctx);
@@ -154,7 +154,7 @@ describe("AccountSwitcherRuntime", () => {
         piAuth: { provider: "opencode", entry: { type: "api_key", key: "sk-test" } },
       });
 
-      const pi = { registerProvider: () => {}, setModel: () => {} };
+      const pi = { registerProvider: () => {}, setModel: async () => true };
       const runtime = new AccountSwitcherRuntime(pi, { accounts: accPath, providers: provPath, state: statePath });
       const ctx = mockCtx({ cwd: "/somewhere/else" });
       await runtime.init(ctx);
@@ -184,7 +184,7 @@ describe("AccountSwitcherRuntime", () => {
       });
       await setup.setDefaultAccountId("pxs");
 
-      const pi = { registerProvider: () => {}, setModel: () => {} };
+      const pi = { registerProvider: () => {}, setModel: async () => true };
       const runtime = new AccountSwitcherRuntime(pi, { accounts: accPath, providers: provPath, state: statePath });
 
       // First init: no session state → dirs match "personal"
