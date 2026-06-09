@@ -115,8 +115,8 @@ describe("AccountService", () => {
     });
   });
 
-  describe("cascade: defaultAccountId fallback", () => {
-    it("falls back to defaultAccountId when no session state exists", async () => {
+  describe("cascade: defaultAccountId fallback (via runtime.init, not load)", () => {
+    it("load() does not fall back to defaultAccountId — only session state", async () => {
       const dir = await mkdtemp(join(tmpdir(), "account-switcher-"));
       const accountsPath = join(dir, "accounts.json");
       const statePath = join(dir, "state.json");
@@ -130,12 +130,14 @@ describe("AccountService", () => {
       });
       await store.setDefaultAccountId("default-user");
 
-      // New session with no state — should fall back to defaultAccountId
+      // load() now only loads session state — no fallback to defaultAccountId.
+      // The full cascade (session → dirs → defaultAccountId) runs in runtime.init().
       const session = useAccountService(accountsPath, statePath);
       session.setSessionKey("fresh-session");
       await session.load();
 
-      expect(session.getActiveAccount()?.id).toBe("default-user");
+      // No session state → no active account from load() alone
+      expect(session.getActiveAccount()).toBeUndefined();
     });
 
     it("session state takes priority over defaultAccountId", async () => {
