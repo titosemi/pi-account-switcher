@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
-import { describe, expect, it, beforeAll } from "vitest";
+import { describe, expect, it, beforeAll, vi } from "vitest";
 import AccountSwitcherRuntime from "./account-switcher-runtime";
 import { useAccountService } from "../services";
 import type { AccountSwitcherContext } from "../types";
@@ -11,7 +11,7 @@ function mockCtx(overrides: {
   cwd?: string;
   sessionFile?: string;
 }): AccountSwitcherContext {
-  const authStorage = { set: () => {}, reload: () => {}, removeRuntimeApiKey: () => {}, get: () => undefined };
+  const authStorage = { set: () => {}, reload: () => {}, setRuntimeApiKey: () => {}, removeRuntimeApiKey: () => {}, get: () => undefined };
   return {
     cwd: overrides.cwd ?? homedir(),
     hasUI: false,
@@ -42,7 +42,6 @@ describe("AccountSwitcherRuntime", () => {
       const provPath = join(dir, "providers.json");
       const statePath = join(dir, "state.json");
 
-      // Set up accounts: "personal" has a dir that matches cwd, "pxs" is defaultAccountId
       const setup = useAccountService(accPath, statePath);
       await setup.addAccount({
         id: "personal",
@@ -60,19 +59,16 @@ describe("AccountSwitcherRuntime", () => {
       });
       await setup.setDefaultAccountId("pxs");
 
-      // Pre-populate session state for the session key derived from "session-mysession"
       const { createHash } = await import("node:crypto");
       const sessionKey = createHash("sha256").update("session-mysession").digest("hex").slice(0, 12);
       const { useStateStore } = await import("../storage");
       await useStateStore(statePath).saveSession(sessionKey, { activeAccountId: "pxs" });
 
-      // Create runtime with custom paths and run init in a dir that would match "personal"
       const pi = { registerProvider: () => {}, setModel: async () => true };
       const runtime = new AccountSwitcherRuntime(pi, { accounts: accPath, providers: provPath, state: statePath });
       const ctx = mockCtx({ cwd: "/home/user/my-project", sessionFile: "session-mysession" });
       await runtime.init(ctx);
 
-      // Session state has "pxs" — should win over dirs match to "personal"
       expect(runtime.getActiveAccount()?.id).toBe("pxs");
     });
 
@@ -103,7 +99,6 @@ describe("AccountSwitcherRuntime", () => {
       const ctx = mockCtx({ cwd: "/home/user/my-project" });
       await runtime.init(ctx);
 
-      // No session state, but cwd matches "personal" dirs — should pick personal
       expect(runtime.getActiveAccount()?.id).toBe("personal");
     });
 
@@ -131,10 +126,9 @@ describe("AccountSwitcherRuntime", () => {
 
       const pi = { registerProvider: () => {}, setModel: async () => true };
       const runtime = new AccountSwitcherRuntime(pi, { accounts: accPath, providers: provPath, state: statePath });
-      const ctx = mockCtx({ cwd: "/some/unrelated/path" });
+      const ctx = mockCtx({});
       await runtime.init(ctx);
 
-      // No session, no dir match → defaultAccountId "pxs"
       expect(runtime.getActiveAccount()?.id).toBe("pxs");
     });
 
@@ -144,19 +138,17 @@ describe("AccountSwitcherRuntime", () => {
       const provPath = join(dir, "providers.json");
       const statePath = join(dir, "state.json");
 
-      // Accounts but no defaultAccountId and no dirs match
       const setup = useAccountService(accPath, statePath);
       await setup.addAccount({
-        id: "work",
-        label: "Work",
+        id: "orphan",
+        label: "Orphan",
         provider: "opencode",
-        dirs: ["/home/user/work"],
-        piAuth: { provider: "opencode", entry: { type: "api_key", key: "sk-test" } },
+        piAuth: { provider: "opencode", entry: { type: "api_key", key: "sk-i" } },
       });
 
       const pi = { registerProvider: () => {}, setModel: async () => true };
       const runtime = new AccountSwitcherRuntime(pi, { accounts: accPath, providers: provPath, state: statePath });
-      const ctx = mockCtx({ cwd: "/somewhere/else" });
+      const ctx = mockCtx({});
       await runtime.init(ctx);
 
       expect(runtime.getActiveAccount()).toBeUndefined();
@@ -180,25 +172,57 @@ describe("AccountSwitcherRuntime", () => {
         id: "pxs",
         label: "PXS",
         provider: "opencode",
-        piAuth: { provider: "opencode", entry: { type: "api_key", key: "sk-test" } },
+        piAuth: { provider: "opencode", entry: { type: "api_key", key: "sk-t" } },
       });
       await setup.setDefaultAccountId("pxs");
 
       const pi = { registerProvider: () => {}, setModel: async () => true };
       const runtime = new AccountSwitcherRuntime(pi, { accounts: accPath, providers: provPath, state: statePath });
-
-      // First init: no session state → dirs match "personal"
       const ctx1 = mockCtx({ cwd: "/home/user/my-project", sessionFile: "session-alpha" });
       await runtime.init(ctx1);
       expect(runtime.getActiveAccount()?.id).toBe("personal");
 
-      // Second init: same session key → should restore "personal" from state, not re-cascade
       const runtime2 = new AccountSwitcherRuntime(pi, { accounts: accPath, providers: provPath, state: statePath });
       const ctx2 = mockCtx({ cwd: "/somewhere/else", sessionFile: "session-alpha" });
       await runtime2.init(ctx2);
 
-      // Even though cwd is unrelated now, session state from first init should persist
       expect(runtime2.getActiveAccount()?.id).toBe("personal");
+    });
+  });
+
+  describe("onModelSelect", () => {
+    it("does not switch when both accounts share the same provider", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "as-oms-"));
+      const accountsPath = join(dir, "accounts.json");
+      const providersPath = join(dir, "providers.json");
+      const statePath = join(dir, "state.json");
+
+      const accountService = useAccountService(accountsPath, statePath);
+      await accountService.addAccount({
+        id: "alice",
+        label: "alice",
+        provider: "opencode-go",
+        env: { KEY: { type: "literal" as const, value: "alice" } },
+      });
+      await accountService.addAccount({
+        id: "bob",
+        label: "bob",
+        provider: "opencode-go",
+        env: { KEY: { type: "literal" as const, value: "bob" } },
+      });
+      await accountService.load();
+
+      const pi = { registerProvider: vi.fn(), setModel: vi.fn().mockResolvedValue(true) };
+      const runtime = new AccountSwitcherRuntime(pi as never, { accounts: accountsPath, providers: providersPath, state: statePath });
+      const bobCtx = { ...mockCtx({}), model: { provider: "opencode-go" as const, id: "dummy", name: "dummy", api: "opencode", baseUrl: "https://api.opencode.ai", reasoning: false, input: ["text" as const], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128000, maxTokens: 16384 } };
+      await runtime.load();
+      await runtime.activateAccount({ id: "bob", label: "bob", provider: "opencode-go", env: { KEY: { type: "literal" as const, value: "bob" } } }, bobCtx);
+
+      expect(runtime.getActiveAccount()?.id).toBe("bob");
+
+      await runtime.onModelSelect("opencode-go", mockCtx({}));
+
+      expect(runtime.getActiveAccount()?.id).toBe("bob");
     });
   });
 });

@@ -101,8 +101,16 @@ export default class AccountSwitcherRuntime implements AccountSwitcher {
   }
 
   async onModelSelect(provider: string, ctx: AccountSwitcherContext): Promise<void> {
-    const matchingAccount = this.findAccountsByProvider(provider)[0];
+    const providers = this.providerService.getProviders();
+    const normalizedProvider = providerUtil.normalizeProviderWithCustom(provider, providers);
     const activeAccount = this.accountService.getActiveAccount();
+
+    // If the active account already belongs to this provider, keep it.
+    if (activeAccount && resolveAccountProvider(activeAccount, providers) === normalizedProvider) {
+      return;
+    }
+
+    const matchingAccount = this.findAccountsByProvider(provider)[0];
     if (matchingAccount && matchingAccount.id !== activeAccount?.id) {
       await this.activateAccount(matchingAccount, ctx);
     }
